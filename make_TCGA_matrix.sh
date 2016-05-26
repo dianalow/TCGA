@@ -11,7 +11,7 @@ SITE  : http://github.com/dianalow
 LAST UPDATED: May 26 2016
 ####################################################
 
-$(basename "$0") [-h] [-t file_identifier] [-n name_mapping] [-m output_filename] 
+$(basename "$0") [-h] [-t file_identifier] [-n name_mapping] [-m output_filename] [-s]
 
 where:
     -h  show this help text
@@ -24,13 +24,16 @@ where:
         * can be obtained from TCGA's file_manifest.txt
 
     -m  output file for matrix to be written to
+
+    -s  sort files before concatenation; will increasing processing time
 "
 tflag=false
 nflag=false
 mflag=false
+sflag=false
 OPTIND=1
 
-while getopts ':t:n:m:h' option; do
+while getopts ':t:n:m:hs' option; do
   case "$option" in
     t) echo "-t argument: $OPTARG"
        file_identifier=$OPTARG
@@ -43,6 +46,8 @@ while getopts ':t:n:m:h' option; do
     m) echo "-m argument: $OPTARG"
        matrix_file=$OPTARG
        mflag=true
+       ;;
+    s) sflag=true
        ;;
     h) echo "$usage"
        exit 0
@@ -74,6 +79,12 @@ if [ ! -f $name_mapper ]; then
     exit 1
 fi
 
+# warn about time taken for sorting
+if $sflag
+then
+     echo "NOTE: File sorting has been switched on, this will increase processing time."
+fi
+
 # make array for name mapping
 declare -A myArray
 filename=$name_mapper
@@ -85,21 +96,32 @@ do
 done < "$filename"
 
 # preparing counter, temporary files
-counter=0
+counter=1
 currdir=$(pwd)
 tmpdir=$(mktemp -d -p $currdir)
 filenames_file=$(mktemp -p $tmpdir)
 echo 'gene' >> $filenames_file
 
+echo "*******************************************"
 for thefile in $(ls -1 *$file_identifier*) 
 do
-   echo "File #" $counter
-   if [ $counter -eq 0 ]
+   echo "Processing file #" $counter "...."
+   if [ $counter -eq 1 ]
    then
+       if $sflag
+       then
+	    echo "Sorting" $thefile
+            sort -k1,1 $thefile -o $thefile
+       fi
        file1=$thefile
        echo ${myArray[$file1]} >> $filenames_file
    else
        tmpfile=$(mktemp -p $tmpdir)
+       if $sflag
+       then
+            echo "Sorting" $thefile
+            sort -k1,1 $thefile -o $thefile
+       fi
        file2=$thefile
        echo ${myArray[$file2]} >> $filenames_file
        join -j 1 $file1 $file2 > $tmpfile
@@ -108,9 +130,13 @@ do
    let counter=counter+1
 done
 
+echo "*******************************************"
 # cleanup
+echo "Finalizing file...."
 sed -i '1d' $file1
 fheader=$(paste -sd" " $filenames_file)
 echo $fheader | cat - $file1 > $matrix_file
+echo "Cleaning up...."
 rm -R $tmpdir/*
 rmdir $tmpdir
+echo "Done."
