@@ -25,7 +25,7 @@ where:
 
     -m  output file for matrix to be written to
 
-    -s  sort files before concatenation; will increasing processing time
+    -s  sort files before concatenation; will increase processing time
 "
 tflag=false
 nflag=false
